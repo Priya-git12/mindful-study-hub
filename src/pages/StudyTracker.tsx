@@ -1,9 +1,13 @@
-import { useState } from "react";
+import { useEffect, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Play, Pause, Square } from "lucide-react";
+import { Play, Pause, Square, RotateCcw } from "lucide-react";
 import { motion } from "framer-motion";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { BloomStreak } from "@/components/BloomStreak";
+import { usePersistentTimer } from "@/hooks/usePersistentTimer";
+import { useBloomStreak } from "@/hooks/useBloomStreak";
+import { useToast } from "@/hooks/use-toast";
 
 const weeklyData = [
   { day: "Mon", hours: 4 },
@@ -23,15 +27,51 @@ const subjectData = [
 ];
 
 export default function StudyTracker() {
-  const [isTracking, setIsTracking] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const [time, setTime] = useState(0);
+  const { time, isTracking, isPaused, start, pause, resume, stop, reset } = usePersistentTimer();
+  const { progress, streak, fullBloomDays, addStudyTime } = useBloomStreak();
+  const { toast } = useToast();
+  const lastTimeRef = useRef(time);
+
+  // Track study time for bloom progress
+  useEffect(() => {
+    if (isTracking && !isPaused && time > lastTimeRef.current) {
+      const elapsed = time - lastTimeRef.current;
+      addStudyTime(elapsed);
+    }
+    lastTimeRef.current = time;
+  }, [time, isTracking, isPaused, addStudyTime]);
 
   const formatTime = (seconds: number) => {
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
     return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleStart = () => {
+    start();
+    toast({
+      title: "Focus session started",
+      description: "Time to bloom! 🌸",
+    });
+  };
+
+  const handleStop = () => {
+    if (time > 0) {
+      toast({
+        title: "Session complete!",
+        description: `You studied for ${formatTime(time)}. Great work!`,
+      });
+    }
+    stop();
+  };
+
+  const handleReset = () => {
+    reset();
+    toast({
+      title: "Timer reset",
+      description: "Ready for a fresh start!",
+    });
   };
 
   return (
@@ -44,61 +84,83 @@ export default function StudyTracker() {
         <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
           Study Tracker
         </h1>
-        <p className="text-muted-foreground">Track your focus sessions and analyze your progress</p>
+        <p className="text-muted-foreground">Track your focus sessions and bloom with progress</p>
       </motion.div>
 
-      {/* Timer Card */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: 0.1 }}
-      >
-        <Card className="p-8 shadow-card border-border/50 bg-gradient-primary text-primary-foreground">
-          <div className="text-center space-y-6">
-            <h2 className="text-2xl font-semibold opacity-90">Current Session</h2>
-            <div className="text-6xl md:text-7xl font-bold font-mono tracking-wider">
-              {formatTime(time)}
-            </div>
-            <div className="flex gap-4 justify-center pt-4">
-              {!isTracking ? (
+      {/* Timer and BloomStreak Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Timer Card - Takes 2 columns */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.1 }}
+          className="lg:col-span-2"
+        >
+          <Card className="p-8 shadow-card border-border/50 bg-gradient-primary text-primary-foreground h-full">
+            <div className="text-center space-y-6">
+              <h2 className="text-2xl font-semibold opacity-90">Current Session</h2>
+              <motion.div
+                className="text-6xl md:text-7xl font-bold font-mono tracking-wider"
+                key={time}
+                animate={{ scale: [1, 1.02, 1] }}
+                transition={{ duration: 1 }}
+              >
+                {formatTime(time)}
+              </motion.div>
+              <div className="flex flex-wrap gap-3 justify-center pt-4">
+                {!isTracking ? (
+                  <Button
+                    size="lg"
+                    onClick={handleStart}
+                    className="bg-primary-foreground text-primary hover:bg-primary-foreground/90 shadow-soft px-8 transition-all duration-300 hover:scale-105"
+                  >
+                    <Play className="mr-2 h-5 w-5" />
+                    Start Session
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      size="lg"
+                      onClick={isPaused ? resume : pause}
+                      variant="outline"
+                      className="bg-primary-foreground/10 border-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/20 px-8 transition-all duration-300"
+                    >
+                      {isPaused ? <Play className="mr-2 h-5 w-5" /> : <Pause className="mr-2 h-5 w-5" />}
+                      {isPaused ? "Resume" : "Pause"}
+                    </Button>
+                    <Button
+                      size="lg"
+                      onClick={handleStop}
+                      variant="outline"
+                      className="bg-primary-foreground/10 border-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/20 px-8 transition-all duration-300"
+                    >
+                      <Square className="mr-2 h-5 w-5" />
+                      Stop
+                    </Button>
+                  </>
+                )}
                 <Button
                   size="lg"
-                  onClick={() => setIsTracking(true)}
-                  className="bg-primary-foreground text-primary hover:bg-primary-foreground/90 shadow-soft px-8"
+                  onClick={handleReset}
+                  variant="outline"
+                  className="bg-primary-foreground/10 border-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/20 transition-all duration-300"
                 >
-                  <Play className="mr-2 h-5 w-5" />
-                  Start Session
+                  <RotateCcw className="h-5 w-5" />
                 </Button>
-              ) : (
-                <>
-                  <Button
-                    size="lg"
-                    onClick={() => setIsPaused(!isPaused)}
-                    variant="outline"
-                    className="bg-primary-foreground/10 border-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/20 px-8"
-                  >
-                    {isPaused ? <Play className="mr-2 h-5 w-5" /> : <Pause className="mr-2 h-5 w-5" />}
-                    {isPaused ? "Resume" : "Pause"}
-                  </Button>
-                  <Button
-                    size="lg"
-                    onClick={() => {
-                      setIsTracking(false);
-                      setIsPaused(false);
-                      setTime(0);
-                    }}
-                    variant="outline"
-                    className="bg-primary-foreground/10 border-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/20 px-8"
-                  >
-                    <Square className="mr-2 h-5 w-5" />
-                    Stop
-                  </Button>
-                </>
-              )}
+              </div>
             </div>
-          </div>
-        </Card>
-      </motion.div>
+          </Card>
+        </motion.div>
+
+        {/* BloomStreak Card */}
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.2 }}
+        >
+          <BloomStreak progress={progress} streak={streak} fullBloomDays={fullBloomDays} />
+        </motion.div>
+      </div>
 
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

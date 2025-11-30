@@ -66,6 +66,16 @@ All colors MUST be HSL.
     
     /* Animations */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    
+    /* BloomStreak Colors - Calming Pastels */
+    --bloom-0: 280 25% 92%;     /* Shy faint lavender */
+    --bloom-20: 280 35% 85%;    /* Gentle lavender tint */
+    --bloom-40: 300 45% 78%;    /* Soft growing pink-lavender */
+    --bloom-60: 320 55% 72%;    /* Vibrant petal pink */
+    --bloom-80: 340 65% 68%;    /* Blooming coral-pink */
+    --bloom-100: 350 75% 65%;   /* Full bloom bright rose */
+    --bloom-glow: 340 65% 85%;  /* Soft glow around petals */
+    --bloom-center: 45 80% 75%; /* Warm sunny center */
   }
 
   .dark {
@@ -120,6 +130,16 @@ All colors MUST be HSL.
     --shadow-soft: 0 4px 20px -4px hsl(195 85% 55% / 0.2);
     --shadow-glow: 0 0 40px hsl(195 85% 70% / 0.3);
     --shadow-card: 0 2px 16px -2px hsl(0 0% 0% / 0.3);
+    
+    /* BloomStreak Dark Mode Colors */
+    --bloom-0: 280 30% 25%;
+    --bloom-20: 280 40% 35%;
+    --bloom-40: 300 50% 45%;
+    --bloom-60: 320 60% 55%;
+    --bloom-80: 340 70% 60%;
+    --bloom-100: 350 80% 65%;
+    --bloom-glow: 340 70% 40%;
+    --bloom-center: 45 75% 60%;
   }
 }
 

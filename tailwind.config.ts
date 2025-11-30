@@ -66,6 +66,16 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        bloom: {
+          0: "hsl(var(--bloom-0))",
+          20: "hsl(var(--bloom-20))",
+          40: "hsl(var(--bloom-40))",
+          60: "hsl(var(--bloom-60))",
+          80: "hsl(var(--bloom-80))",
+          100: "hsl(var(--bloom-100))",
+          glow: "hsl(var(--bloom-glow))",
+          center: "hsl(var(--bloom-center))",
+        },
       },
       backgroundImage: {
         'gradient-primary': 'var(--gradient-primary)',

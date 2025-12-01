@@ -31,16 +31,26 @@ export default function EmotionAnalyzer() {
   const [result, setResult] = useState<{ emotion: string; confidence: number; reasoning?: string; motivation?: string } | null>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [videoReady, setVideoReady] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const { toast } = useToast();
 
   const startCamera = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          facingMode: "user",
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        } 
+      });
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = () => {
+          setVideoReady(true);
+        };
       }
       setIsCameraActive(true);
     } catch (err) {
@@ -59,19 +69,48 @@ export default function EmotionAnalyzer() {
       streamRef.current = null;
     }
     setIsCameraActive(false);
+    setVideoReady(false);
   };
 
   const captureImage = () => {
-    if (videoRef.current) {
-      const canvas = document.createElement('canvas');
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(videoRef.current, 0, 0);
-        const imageData = canvas.toDataURL('image/jpeg', 0.8);
+    if (!videoRef.current || !videoReady) {
+      toast({
+        title: "Camera Not Ready",
+        description: "Please wait for the camera to fully load.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const video = videoRef.current;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    if (canvas.width === 0 || canvas.height === 0) {
+      toast({
+        title: "Capture Failed",
+        description: "Camera not ready yet. Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = canvas.toDataURL('image/jpeg', 0.95);
+      
+      // Validate the image data
+      if (imageData && imageData.length > 100) {
         setCapturedImage(imageData);
         stopCamera();
+      } else {
+        toast({
+          title: "Capture Failed",
+          description: "Failed to capture image. Please try again.",
+          variant: "destructive",
+        });
       }
     }
   };
@@ -185,9 +224,13 @@ export default function EmotionAnalyzer() {
                   />
                 </div>
                 <div className="flex gap-2">
-                  <Button onClick={captureImage} className="flex-1">
+                  <Button 
+                    onClick={captureImage} 
+                    className="flex-1"
+                    disabled={!videoReady}
+                  >
                     <Camera className="mr-2 h-4 w-4" />
-                    Capture
+                    {videoReady ? 'Capture' : 'Loading...'}
                   </Button>
                   <Button onClick={stopCamera} variant="outline">
                     <X className="h-4 w-4" />

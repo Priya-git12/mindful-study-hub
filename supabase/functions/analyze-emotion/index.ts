@@ -20,6 +20,15 @@ serve(async (req) => {
       );
     }
 
+    // Validate image data if provided
+    if (image && (!image.startsWith('data:image/') || image.length < 100)) {
+      console.error("Invalid image data received:", image.substring(0, 50));
+      return new Response(
+        JSON.stringify({ error: "Invalid image data. Please capture a new image." }), 
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       console.error("LOVABLE_API_KEY is not configured");

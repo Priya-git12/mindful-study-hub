@@ -1,6 +1,10 @@
-import { Home, Clock, Heart, Calendar, Sparkles } from "lucide-react";
+import { Home, Clock, Heart, Calendar, Sparkles, LogOut } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import { useStudySession } from "@/hooks/useStudySession";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 
 import {
   Sidebar,
@@ -11,6 +15,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarFooter,
   useSidebar,
 } from "@/components/ui/sidebar";
 
@@ -26,6 +31,20 @@ export function AppSidebar() {
   const { open } = useSidebar();
   const location = useLocation();
   const currentPath = location.pathname;
+  const { user, signOut } = useAuth();
+  const { endSession, currentSession } = useStudySession();
+  const { toast } = useToast();
+
+  const handleLogout = async () => {
+    if (currentSession) {
+      await endSession();
+    }
+    await signOut();
+    toast({
+      title: "Signed Out",
+      description: "See you next time!",
+    });
+  };
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
@@ -70,6 +89,27 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+
+      <SidebarFooter className="p-4 border-t border-sidebar-border">
+        {user && (
+          <div className="space-y-3">
+            {open && (
+              <p className="text-xs text-muted-foreground truncate">
+                {user.email}
+              </p>
+            )}
+            <Button
+              variant="ghost"
+              size={open ? "default" : "icon"}
+              onClick={handleLogout}
+              className="w-full justify-start text-muted-foreground hover:text-foreground"
+            >
+              <LogOut className="h-4 w-4" />
+              {open && <span className="ml-2">Sign Out</span>}
+            </Button>
+          </div>
+        )}
+      </SidebarFooter>
     </Sidebar>
   );
 }

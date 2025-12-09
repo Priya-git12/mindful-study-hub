@@ -14,7 +14,71 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      profiles: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      study_sessions: {
+        Row: {
+          created_at: string
+          duration_seconds: number | null
+          emotion_detected: string | null
+          id: string
+          login_timestamp: string
+          logout_timestamp: string | null
+          notes: string | null
+          subjects_studied: string[] | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          duration_seconds?: number | null
+          emotion_detected?: string | null
+          id?: string
+          login_timestamp: string
+          logout_timestamp?: string | null
+          notes?: string | null
+          subjects_studied?: string[] | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          duration_seconds?: number | null
+          emotion_detected?: string | null
+          id?: string
+          login_timestamp?: string
+          logout_timestamp?: string | null
+          notes?: string | null
+          subjects_studied?: string[] | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "study_sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

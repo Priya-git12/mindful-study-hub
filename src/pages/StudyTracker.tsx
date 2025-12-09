@@ -7,6 +7,7 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, R
 import { BloomStreak } from "@/components/BloomStreak";
 import { usePersistentTimer } from "@/hooks/usePersistentTimer";
 import { useBloomStreak } from "@/hooks/useBloomStreak";
+import { useStudySession } from "@/hooks/useStudySession";
 import { useToast } from "@/hooks/use-toast";
 
 const weeklyData = [
@@ -29,17 +30,23 @@ const subjectData = [
 export default function StudyTracker() {
   const { time, isTracking, isPaused, start, pause, resume, stop, reset } = usePersistentTimer();
   const { progress, streak, fullBloomDays, addStudyTime } = useBloomStreak();
+  const { updateSession } = useStudySession();
   const { toast } = useToast();
   const lastTimeRef = useRef(time);
 
-  // Track study time for bloom progress
+  // Track study time for bloom progress and update session
   useEffect(() => {
     if (isTracking && !isPaused && time > lastTimeRef.current) {
       const elapsed = time - lastTimeRef.current;
       addStudyTime(elapsed);
+      
+      // Update session with current duration every 30 seconds
+      if (time % 30 === 0) {
+        updateSession({ duration_seconds: time });
+      }
     }
     lastTimeRef.current = time;
-  }, [time, isTracking, isPaused, addStudyTime]);
+  }, [time, isTracking, isPaused, addStudyTime, updateSession]);
 
   const formatTime = (seconds: number) => {
     const hrs = Math.floor(seconds / 3600);
@@ -58,6 +65,8 @@ export default function StudyTracker() {
 
   const handleStop = () => {
     if (time > 0) {
+      // Save final duration to session
+      updateSession({ duration_seconds: time });
       toast({
         title: "Session complete!",
         description: `You studied for ${formatTime(time)}. Great work!`,

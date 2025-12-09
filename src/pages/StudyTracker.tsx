@@ -1,13 +1,14 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Play, Pause, Square, RotateCcw } from "lucide-react";
+import { Play, Pause, Square, RotateCcw, CheckCircle2, Target } from "lucide-react";
 import { motion } from "framer-motion";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { BloomStreak } from "@/components/BloomStreak";
 import { usePersistentTimer } from "@/hooks/usePersistentTimer";
 import { useBloomStreak } from "@/hooks/useBloomStreak";
 import { useStudySession } from "@/hooks/useStudySession";
+import { useStudySchedule } from "@/hooks/useStudySchedule";
 import { useToast } from "@/hooks/use-toast";
 
 const weeklyData = [
@@ -31,8 +32,13 @@ export default function StudyTracker() {
   const { time, isTracking, isPaused, start, pause, resume, stop, reset } = usePersistentTimer();
   const { progress, streak, fullBloomDays, addStudyTime } = useBloomStreak();
   const { updateSession } = useStudySession();
+  const { activeSchedule, getTodaysSessions, getDailyProgress, markSessionComplete, isSessionCompleted } = useStudySchedule();
   const { toast } = useToast();
   const lastTimeRef = useRef(time);
+  const [selectedSessionIndex, setSelectedSessionIndex] = useState<number | null>(null);
+
+  const todaysSessions = getTodaysSessions();
+  const dailyProgress = getDailyProgress();
 
   // Track study time for bloom progress and update session
   useEffect(() => {
@@ -55,7 +61,10 @@ export default function StudyTracker() {
     return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleStart = () => {
+  const handleStart = (sessionIndex?: number) => {
+    if (sessionIndex !== undefined) {
+      setSelectedSessionIndex(sessionIndex);
+    }
     start();
     toast({
       title: "Focus session started",
@@ -63,20 +72,32 @@ export default function StudyTracker() {
     });
   };
 
-  const handleStop = () => {
+  const handleStop = async () => {
     if (time > 0) {
       // Save final duration to session
       updateSession({ duration_seconds: time });
+      
+      // If tracking a scheduled session, mark it complete
+      if (selectedSessionIndex !== null && todaysSessions) {
+        const today = new Date().toLocaleDateString("en-US", { weekday: "long" });
+        const session = todaysSessions.sessions[selectedSessionIndex];
+        if (session) {
+          await markSessionComplete(today, selectedSessionIndex, session.subject, time);
+        }
+      }
+      
       toast({
         title: "Session complete!",
         description: `You studied for ${formatTime(time)}. Great work!`,
       });
     }
     stop();
+    setSelectedSessionIndex(null);
   };
 
   const handleReset = () => {
     reset();
+    setSelectedSessionIndex(null);
     toast({
       title: "Timer reset",
       description: "Ready for a fresh start!",
@@ -96,6 +117,87 @@ export default function StudyTracker() {
         <p className="text-muted-foreground">Track your focus sessions and bloom with progress</p>
       </motion.div>
 
+      {/* Today's Schedule from Active Schedule */}
+      {activeSchedule && todaysSessions && todaysSessions.sessions.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <Card className="p-6 shadow-card border-border/50">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold flex items-center gap-2">
+                <Target className="h-5 w-5 text-primary" />
+                Today's Schedule
+              </h3>
+              <div className="text-sm text-muted-foreground">
+                {dailyProgress.completed}/{dailyProgress.total} completed
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-4 mb-4">
+              <div className="flex-1 bg-muted rounded-full h-2">
+                <div
+                  className="bg-gradient-primary h-2 rounded-full transition-all"
+                  style={{
+                    width: dailyProgress.total > 0 
+                      ? `${(dailyProgress.completed / dailyProgress.total) * 100}%` 
+                      : "0%",
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {todaysSessions.sessions.map((session, idx) => {
+                const today = new Date().toLocaleDateString("en-US", { weekday: "long" });
+                const completed = isSessionCompleted(today, idx);
+                const isSelected = selectedSessionIndex === idx && isTracking;
+                
+                return (
+                  <div
+                    key={idx}
+                    className={`p-3 rounded-lg border ${
+                      completed 
+                        ? "bg-green-500/10 border-green-500/30" 
+                        : isSelected
+                        ? "bg-primary/10 border-primary/30"
+                        : "bg-muted/30 border-border/50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {session.time}
+                      </span>
+                      {completed && (
+                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      )}
+                    </div>
+                    <p className="font-medium text-sm">{session.subject}</p>
+                    <p className="text-xs text-muted-foreground">{session.topic}</p>
+                    {!completed && !isTracking && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="mt-2 w-full"
+                        onClick={() => handleStart(idx)}
+                      >
+                        <Play className="h-3 w-3 mr-1" />
+                        Start
+                      </Button>
+                    )}
+                    {isSelected && (
+                      <div className="mt-2 text-xs text-primary font-medium">
+                        Currently tracking...
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        </motion.div>
+      )}
+
       {/* Timer and BloomStreak Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Timer Card - Takes 2 columns */}
@@ -107,7 +209,11 @@ export default function StudyTracker() {
         >
           <Card className="p-8 shadow-card border-border/50 bg-gradient-primary text-primary-foreground h-full">
             <div className="text-center space-y-6">
-              <h2 className="text-2xl font-semibold opacity-90">Current Session</h2>
+              <h2 className="text-2xl font-semibold opacity-90">
+                {selectedSessionIndex !== null && todaysSessions
+                  ? `Studying: ${todaysSessions.sessions[selectedSessionIndex]?.subject}`
+                  : "Current Session"}
+              </h2>
               <motion.div
                 className="text-6xl md:text-7xl font-bold font-mono tracking-wider"
                 key={time}
@@ -120,7 +226,7 @@ export default function StudyTracker() {
                 {!isTracking ? (
                   <Button
                     size="lg"
-                    onClick={handleStart}
+                    onClick={() => handleStart()}
                     className="bg-primary-foreground text-primary hover:bg-primary-foreground/90 shadow-soft px-8 transition-all duration-300 hover:scale-105"
                   >
                     <Play className="mr-2 h-5 w-5" />

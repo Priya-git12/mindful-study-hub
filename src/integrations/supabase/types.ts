@@ -35,6 +35,110 @@ export type Database = {
         }
         Relationships: []
       }
+      schedule_session_completions: {
+        Row: {
+          completed_at: string
+          created_at: string
+          day: string
+          duration_seconds: number
+          id: string
+          schedule_id: string
+          session_index: number
+          subject: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string
+          created_at?: string
+          day: string
+          duration_seconds: number
+          id?: string
+          schedule_id: string
+          session_index: number
+          subject: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string
+          created_at?: string
+          day?: string
+          duration_seconds?: number
+          id?: string
+          schedule_id?: string
+          session_index?: number
+          subject?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "schedule_session_completions_schedule_id_fkey"
+            columns: ["schedule_id"]
+            isOneToOne: false
+            referencedRelation: "study_schedules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "schedule_session_completions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      study_schedules: {
+        Row: {
+          created_at: string
+          end_date: string
+          id: string
+          priorities: string[] | null
+          start_date: string
+          status: string
+          subjects: Json
+          tips: string[] | null
+          total_hours: number
+          updated_at: string
+          user_id: string
+          weekly_plan: Json
+        }
+        Insert: {
+          created_at?: string
+          end_date: string
+          id?: string
+          priorities?: string[] | null
+          start_date: string
+          status?: string
+          subjects: Json
+          tips?: string[] | null
+          total_hours: number
+          updated_at?: string
+          user_id: string
+          weekly_plan: Json
+        }
+        Update: {
+          created_at?: string
+          end_date?: string
+          id?: string
+          priorities?: string[] | null
+          start_date?: string
+          status?: string
+          subjects?: Json
+          tips?: string[] | null
+          total_hours?: number
+          updated_at?: string
+          user_id?: string
+          weekly_plan?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "study_schedules_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       study_sessions: {
         Row: {
           created_at: string

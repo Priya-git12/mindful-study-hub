@@ -205,36 +205,54 @@ export default function Dashboard() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.8 }}
-        className="grid grid-cols-1 md:grid-cols-3 gap-4"
+        className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4"
       >
         <Card
           onClick={() => navigate("/study-tracker")}
-          className="p-6 cursor-pointer transition-all duration-300 hover:shadow-soft hover:-translate-y-1 bg-gradient-primary text-primary-foreground"
+          className="p-4 sm:p-6 cursor-pointer transition-all duration-300 hover:shadow-soft hover:-translate-y-1 bg-gradient-primary text-primary-foreground"
         >
-          <h3 className="font-semibold text-lg mb-2">Start Study Session</h3>
-          <p className="text-sm opacity-90">
-            Begin tracking your focus time
-          </p>
+          <h3 className="font-semibold text-sm sm:text-lg mb-1 sm:mb-2">Study Session</h3>
+          <p className="text-xs sm:text-sm opacity-90">Track your focus</p>
         </Card>
 
         <Card
           onClick={() => navigate("/emotions")}
-          className="p-6 cursor-pointer transition-all duration-300 hover:shadow-soft hover:-translate-y-1 bg-gradient-wellness text-primary-foreground"
+          className="p-4 sm:p-6 cursor-pointer transition-all duration-300 hover:shadow-soft hover:-translate-y-1 bg-gradient-wellness text-primary-foreground"
         >
-          <h3 className="font-semibold text-lg mb-2">Check Your Mood</h3>
-          <p className="text-sm opacity-90">
-            How are you feeling today?
-          </p>
+          <h3 className="font-semibold text-sm sm:text-lg mb-1 sm:mb-2">Check Mood</h3>
+          <p className="text-xs sm:text-sm opacity-90">How are you?</p>
         </Card>
 
         <Card
           onClick={() => navigate("/schedule")}
-          className="p-6 cursor-pointer transition-all duration-300 hover:shadow-soft hover:-translate-y-1 bg-gradient-subtle text-foreground"
+          className="p-4 sm:p-6 cursor-pointer transition-all duration-300 hover:shadow-soft hover:-translate-y-1 bg-gradient-subtle text-foreground"
         >
-          <h3 className="font-semibold text-lg mb-2">View Schedule</h3>
-          <p className="text-sm text-muted-foreground">
-            See your personalized study plan
-          </p>
+          <h3 className="font-semibold text-sm sm:text-lg mb-1 sm:mb-2">Schedule</h3>
+          <p className="text-xs sm:text-sm text-muted-foreground">Study plan</p>
+        </Card>
+
+        <Card
+          onClick={() => navigate("/analytics")}
+          className="p-4 sm:p-6 cursor-pointer transition-all duration-300 hover:shadow-soft hover:-translate-y-1 bg-secondary text-secondary-foreground"
+        >
+          <h3 className="font-semibold text-sm sm:text-lg mb-1 sm:mb-2">Analytics</h3>
+          <p className="text-xs sm:text-sm opacity-90">Weekly stats</p>
+        </Card>
+
+        <Card
+          onClick={() => navigate("/wellbeing")}
+          className="p-4 sm:p-6 cursor-pointer transition-all duration-300 hover:shadow-soft hover:-translate-y-1 bg-accent text-accent-foreground"
+        >
+          <h3 className="font-semibold text-sm sm:text-lg mb-1 sm:mb-2">Well-being</h3>
+          <p className="text-xs sm:text-sm opacity-90">Health insights</p>
+        </Card>
+
+        <Card
+          onClick={() => navigate("/breaks")}
+          className="p-4 sm:p-6 cursor-pointer transition-all duration-300 hover:shadow-soft hover:-translate-y-1 bg-success text-success-foreground"
+        >
+          <h3 className="font-semibold text-sm sm:text-lg mb-1 sm:mb-2">Breaks</h3>
+          <p className="text-xs sm:text-sm opacity-90">Games & music</p>
         </Card>
       </motion.div>
     </div>

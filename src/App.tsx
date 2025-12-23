@@ -10,6 +10,8 @@ import StudyTracker from "./pages/StudyTracker";
 import EmotionAnalyzer from "./pages/EmotionAnalyzer";
 import ScheduleGenerator from "./pages/ScheduleGenerator";
 import Wellbeing from "./pages/Wellbeing";
+import Analytics from "./pages/Analytics";
+import Breaks from "./pages/Breaks";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
@@ -83,6 +85,16 @@ const AppRoutes = () => (
       }
     />
     <Route
+      path="/study-tracker"
+      element={
+        <ProtectedRoute>
+          <Layout>
+            <StudyTracker />
+          </Layout>
+        </ProtectedRoute>
+      }
+    />
+    <Route
       path="/emotions"
       element={
         <ProtectedRoute>
@@ -108,6 +120,26 @@ const AppRoutes = () => (
         <ProtectedRoute>
           <Layout>
             <Wellbeing />
+          </Layout>
+        </ProtectedRoute>
+      }
+    />
+    <Route
+      path="/analytics"
+      element={
+        <ProtectedRoute>
+          <Layout>
+            <Analytics />
+          </Layout>
+        </ProtectedRoute>
+      }
+    />
+    <Route
+      path="/breaks"
+      element={
+        <ProtectedRoute>
+          <Layout>
+            <Breaks />
           </Layout>
         </ProtectedRoute>
       }

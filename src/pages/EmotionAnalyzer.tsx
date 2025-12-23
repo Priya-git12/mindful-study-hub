@@ -2,10 +2,14 @@ import { useState, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Slider } from "@/components/ui/slider";
+import { Label } from "@/components/ui/label";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, Camera, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useEmotionLogs } from "@/hooks/useEmotionLogs";
+import { useStudySession } from "@/hooks/useStudySession";
 
 const emotionEmojis: Record<string, string> = {
   joy: "😊",
@@ -27,6 +31,8 @@ const emotionColors: Record<string, string> = {
 
 export default function EmotionAnalyzer() {
   const [text, setText] = useState("");
+  const [focusLevel, setFocusLevel] = useState([5]);
+  const [stressLevel, setStressLevel] = useState([5]);
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<{ emotion: string; confidence: number; reasoning?: string; motivation?: string } | null>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -35,6 +41,8 @@ export default function EmotionAnalyzer() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const { toast } = useToast();
+  const { logEmotion } = useEmotionLogs();
+  const { currentSession } = useStudySession();
 
   const startCamera = async () => {
     try {
@@ -157,6 +165,20 @@ export default function EmotionAnalyzer() {
         reasoning: data.reasoning,
         motivation: data.motivation
       });
+
+      // Save emotion to database with actual user inputs
+      await logEmotion(data.emotion, Math.round(data.confidence), {
+        sessionId: currentSession?.id,
+        focusLevel: focusLevel[0],
+        stressLevel: stressLevel[0],
+        notes: text.trim() || undefined,
+        source: capturedImage ? "camera" : "text",
+      });
+
+      toast({
+        title: "Emotion logged",
+        description: "Your emotional state has been recorded.",
+      });
     } catch (err) {
       console.error('Unexpected error:', err);
       toast({
@@ -196,6 +218,34 @@ export default function EmotionAnalyzer() {
               onChange={(e) => setText(e.target.value)}
               className="min-h-[120px] resize-none"
             />
+          </div>
+
+          {/* Focus and Stress Level Sliders */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-3">
+              <Label>Focus Level: {focusLevel[0]}/10</Label>
+              <Slider
+                value={focusLevel}
+                onValueChange={setFocusLevel}
+                min={1}
+                max={10}
+                step={1}
+                className="w-full"
+              />
+              <p className="text-xs text-muted-foreground">How focused do you feel right now?</p>
+            </div>
+            <div className="space-y-3">
+              <Label>Stress Level: {stressLevel[0]}/10</Label>
+              <Slider
+                value={stressLevel}
+                onValueChange={setStressLevel}
+                min={1}
+                max={10}
+                step={1}
+                className="w-full"
+              />
+              <p className="text-xs text-muted-foreground">How stressed do you feel right now?</p>
+            </div>
           </div>
 
           <div className="space-y-3">

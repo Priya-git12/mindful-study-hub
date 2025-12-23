@@ -14,6 +14,63 @@ export type Database = {
   }
   public: {
     Tables: {
+      emotion_logs: {
+        Row: {
+          confidence: number
+          created_at: string
+          emotion: string
+          focus_level: number | null
+          id: string
+          mood: string | null
+          notes: string | null
+          session_id: string | null
+          source: string | null
+          stress_level: number | null
+          user_id: string
+        }
+        Insert: {
+          confidence?: number
+          created_at?: string
+          emotion: string
+          focus_level?: number | null
+          id?: string
+          mood?: string | null
+          notes?: string | null
+          session_id?: string | null
+          source?: string | null
+          stress_level?: number | null
+          user_id: string
+        }
+        Update: {
+          confidence?: number
+          created_at?: string
+          emotion?: string
+          focus_level?: number | null
+          id?: string
+          mood?: string | null
+          notes?: string | null
+          session_id?: string | null
+          source?: string | null
+          stress_level?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "emotion_logs_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "study_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "emotion_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
@@ -38,35 +95,44 @@ export type Database = {
       schedule_session_completions: {
         Row: {
           completed_at: string
+          completion_percentage: number | null
           created_at: string
           day: string
           duration_seconds: number
           id: string
           schedule_id: string
           session_index: number
+          status: string | null
           subject: string
+          target_duration_seconds: number | null
           user_id: string
         }
         Insert: {
           completed_at?: string
+          completion_percentage?: number | null
           created_at?: string
           day: string
           duration_seconds: number
           id?: string
           schedule_id: string
           session_index: number
+          status?: string | null
           subject: string
+          target_duration_seconds?: number | null
           user_id: string
         }
         Update: {
           completed_at?: string
+          completion_percentage?: number | null
           created_at?: string
           day?: string
           duration_seconds?: number
           id?: string
           schedule_id?: string
           session_index?: number
+          status?: string | null
           subject?: string
+          target_duration_seconds?: number | null
           user_id?: string
         }
         Relationships: [
@@ -79,6 +145,47 @@ export type Database = {
           },
           {
             foreignKeyName: "schedule_session_completions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      study_reminders: {
+        Row: {
+          created_at: string
+          days_of_week: string[]
+          id: string
+          is_active: boolean
+          time: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          days_of_week?: string[]
+          id?: string
+          is_active?: boolean
+          time: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          days_of_week?: string[]
+          id?: string
+          is_active?: boolean
+          time?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "study_reminders_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"

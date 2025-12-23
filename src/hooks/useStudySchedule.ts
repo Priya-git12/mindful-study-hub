@@ -46,6 +46,9 @@ export interface SessionCompletion {
   session_index: number;
   subject: string;
   duration_seconds: number;
+  target_duration_seconds?: number;
+  completion_percentage?: number;
+  status?: "completed" | "partial" | "skipped";
   completed_at: string;
 }
 
@@ -267,41 +270,77 @@ export function useStudySchedule() {
     day: string,
     sessionIndex: number,
     subject: string,
-    durationSeconds: number
+    durationSeconds: number,
+    targetDurationSeconds?: number,
+    status?: "completed" | "partial" | "skipped"
   ): Promise<boolean> => {
     if (!activeSchedule || !user) return false;
 
-    try {
-      const { data, error } = await supabase
-        .from("schedule_session_completions")
-        .insert({
-          user_id: user.id,
-          schedule_id: activeSchedule.id,
-          day,
-          session_index: sessionIndex,
-          subject,
-          duration_seconds: durationSeconds,
-        })
-        .select()
-        .single();
+    const completionPercentage = targetDurationSeconds 
+      ? Math.min((durationSeconds / targetDurationSeconds) * 100, 100)
+      : 100;
 
-      if (error) {
-        if (error.code === "23505") {
-          toast({
-            title: "Already completed",
-            description: "This session has already been marked as complete.",
-          });
+    try {
+      // Check if there's an existing partial completion to update
+      const existingCompletion = completions.find(
+        (c) => c.day === day && c.session_index === sessionIndex
+      );
+
+      if (existingCompletion) {
+        // Update existing completion
+        const { error } = await supabase
+          .from("schedule_session_completions")
+          .update({
+            duration_seconds: durationSeconds,
+            completion_percentage: completionPercentage,
+            status: status || (completionPercentage >= 100 ? "completed" : "partial"),
+            completed_at: new Date().toISOString(),
+          })
+          .eq("id", existingCompletion.id);
+
+        if (error) {
+          console.error("Error updating completion:", error);
           return false;
         }
-        console.error("Error marking complete:", error);
-        return false;
+
+        setCompletions(completions.map(c => 
+          c.id === existingCompletion.id 
+            ? { ...c, duration_seconds: durationSeconds, completion_percentage: completionPercentage, status: status || "completed" }
+            : c
+        ));
+      } else {
+        // Insert new completion
+        const { data, error } = await supabase
+          .from("schedule_session_completions")
+          .insert({
+            user_id: user.id,
+            schedule_id: activeSchedule.id,
+            day,
+            session_index: sessionIndex,
+            subject,
+            duration_seconds: durationSeconds,
+            target_duration_seconds: targetDurationSeconds,
+            completion_percentage: completionPercentage,
+            status: status || (completionPercentage >= 100 ? "completed" : "partial"),
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.error("Error marking complete:", error);
+          return false;
+        }
+
+        setCompletions([...completions, data as SessionCompletion]);
       }
 
-      setCompletions([...completions, data as SessionCompletion]);
+      const statusMessage = status === "completed" || completionPercentage >= 100
+        ? "Session completed! 🎉"
+        : `Session ${Math.round(completionPercentage)}% complete`;
 
       toast({
-        title: "Session completed! 🎉",
-        description: `Great work on ${subject}!`,
+        title: statusMessage,
+        description: `${subject} - ${Math.floor(durationSeconds / 60)} minutes`,
       });
 
       return true;
@@ -312,9 +351,16 @@ export function useStudySchedule() {
   };
 
   const isSessionCompleted = (day: string, sessionIndex: number): boolean => {
-    return completions.some(
+    const completion = completions.find(
       (c) => c.day === day && c.session_index === sessionIndex
     );
+    return completion?.status === "completed";
+  };
+
+  const getSessionCompletion = (day: string, sessionIndex: number): SessionCompletion | null => {
+    return completions.find(
+      (c) => c.day === day && c.session_index === sessionIndex
+    ) || null;
   };
 
   const getTodaysSessions = (): { sessions: ScheduleSession[]; dayIndex: number } | null => {
@@ -394,6 +440,7 @@ export function useStudySchedule() {
     updateDayPlan,
     markSessionComplete,
     isSessionCompleted,
+    getSessionCompletion,
     getTodaysSessions,
     getDailyProgress,
     deleteSchedule,

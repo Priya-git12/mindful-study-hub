@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Play, Pause, Square, RotateCcw, CheckCircle2, Target } from "lucide-react";
+import { Play, Pause, Square, RotateCcw, CheckCircle2, Target, AlertCircle } from "lucide-react";
 import { motion } from "framer-motion";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { BloomStreak } from "@/components/BloomStreak";
@@ -10,32 +10,21 @@ import { useBloomStreak } from "@/hooks/useBloomStreak";
 import { useStudySession } from "@/hooks/useStudySession";
 import { useStudySchedule } from "@/hooks/useStudySchedule";
 import { useToast } from "@/hooks/use-toast";
+import { useDashboardStats } from "@/hooks/useDashboardStats";
 
-const weeklyData = [
-  { day: "Mon", hours: 4 },
-  { day: "Tue", hours: 5.5 },
-  { day: "Wed", hours: 3 },
-  { day: "Thu", hours: 6 },
-  { day: "Fri", hours: 4.5 },
-  { day: "Sat", hours: 7 },
-  { day: "Sun", hours: 5 },
-];
-
-const subjectData = [
-  { subject: "Math", hours: 12 },
-  { subject: "Physics", hours: 8 },
-  { subject: "Chemistry", hours: 6 },
-  { subject: "Biology", hours: 5 },
-];
+// Default expected session duration (25 minutes in seconds)
+const DEFAULT_SESSION_DURATION = 25 * 60;
 
 export default function StudyTracker() {
   const { time, isTracking, isPaused, start, pause, resume, stop, reset } = usePersistentTimer();
   const { progress, streak, fullBloomDays, addStudyTime } = useBloomStreak();
   const { updateSession } = useStudySession();
-  const { activeSchedule, getTodaysSessions, getDailyProgress, markSessionComplete, isSessionCompleted } = useStudySchedule();
+  const { activeSchedule, getTodaysSessions, getDailyProgress, markSessionComplete, isSessionCompleted, getSessionCompletion } = useStudySchedule();
+  const { stats, refetch: refetchStats } = useDashboardStats();
   const { toast } = useToast();
   const lastTimeRef = useRef(time);
   const [selectedSessionIndex, setSelectedSessionIndex] = useState<number | null>(null);
+  const [targetDuration, setTargetDuration] = useState<number>(DEFAULT_SESSION_DURATION);
 
   const todaysSessions = getTodaysSessions();
   const dailyProgress = getDailyProgress();
@@ -61,10 +50,17 @@ export default function StudyTracker() {
     return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleStart = (sessionIndex?: number) => {
+  const getCompletionPercentage = (actualSeconds: number, targetSeconds: number): number => {
+    if (targetSeconds <= 0) return 100;
+    return Math.min(Math.round((actualSeconds / targetSeconds) * 100), 100);
+  };
+
+  const handleStart = (sessionIndex?: number, sessionTargetMinutes?: number) => {
     if (sessionIndex !== undefined) {
       setSelectedSessionIndex(sessionIndex);
     }
+    // Set target duration based on session or default
+    setTargetDuration(sessionTargetMinutes ? sessionTargetMinutes * 60 : DEFAULT_SESSION_DURATION);
     start();
     toast({
       title: "Focus session started",
@@ -77,19 +73,40 @@ export default function StudyTracker() {
       // Save final duration to session
       updateSession({ duration_seconds: time });
       
-      // If tracking a scheduled session, mark it complete
+      const completionPercentage = getCompletionPercentage(time, targetDuration);
+      const isFullyComplete = completionPercentage >= 100;
+      
+      // If tracking a scheduled session, mark it with status
       if (selectedSessionIndex !== null && todaysSessions) {
         const today = new Date().toLocaleDateString("en-US", { weekday: "long" });
         const session = todaysSessions.sessions[selectedSessionIndex];
         if (session) {
-          await markSessionComplete(today, selectedSessionIndex, session.subject, time);
+          await markSessionComplete(
+            today, 
+            selectedSessionIndex, 
+            session.subject, 
+            time,
+            targetDuration,
+            isFullyComplete ? "completed" : "partial"
+          );
         }
       }
       
-      toast({
-        title: "Session complete!",
-        description: `You studied for ${formatTime(time)}. Great work!`,
-      });
+      if (isFullyComplete) {
+        toast({
+          title: "Session completed! 🎉",
+          description: `You studied for ${formatTime(time)}. Great work!`,
+        });
+      } else {
+        toast({
+          title: "Session ended",
+          description: `You completed ${completionPercentage}% of your session (${formatTime(time)}).`,
+          variant: "default",
+        });
+      }
+      
+      // Refresh stats
+      refetchStats();
     }
     stop();
     setSelectedSessionIndex(null);
@@ -103,6 +120,9 @@ export default function StudyTracker() {
       description: "Ready for a fresh start!",
     });
   };
+
+  // Progress indicator for current session
+  const currentProgress = isTracking ? getCompletionPercentage(time, targetDuration) : 0;
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
@@ -150,15 +170,19 @@ export default function StudyTracker() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {todaysSessions.sessions.map((session, idx) => {
                 const today = new Date().toLocaleDateString("en-US", { weekday: "long" });
-                const completed = isSessionCompleted(today, idx);
+                const completion = getSessionCompletion(today, idx);
+                const isCompleted = completion?.status === "completed";
+                const isPartial = completion?.status === "partial";
                 const isSelected = selectedSessionIndex === idx && isTracking;
                 
                 return (
                   <div
                     key={idx}
                     className={`p-3 rounded-lg border ${
-                      completed 
+                      isCompleted 
                         ? "bg-green-500/10 border-green-500/30" 
+                        : isPartial
+                        ? "bg-yellow-500/10 border-yellow-500/30"
                         : isSelected
                         ? "bg-primary/10 border-primary/30"
                         : "bg-muted/30 border-border/50"
@@ -168,18 +192,26 @@ export default function StudyTracker() {
                       <span className="text-xs font-medium text-muted-foreground">
                         {session.time}
                       </span>
-                      {completed && (
+                      {isCompleted && (
                         <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      )}
+                      {isPartial && (
+                        <div className="flex items-center gap-1">
+                          <AlertCircle className="h-4 w-4 text-yellow-500" />
+                          <span className="text-xs text-yellow-600">
+                            {completion?.completion_percentage?.toFixed(0)}%
+                          </span>
+                        </div>
                       )}
                     </div>
                     <p className="font-medium text-sm">{session.subject}</p>
                     <p className="text-xs text-muted-foreground">{session.topic}</p>
-                    {!completed && !isTracking && (
+                    {!completion && !isTracking && (
                       <Button
                         size="sm"
                         variant="outline"
                         className="mt-2 w-full"
-                        onClick={() => handleStart(idx)}
+                        onClick={() => handleStart(idx, 25)}
                       >
                         <Play className="h-3 w-3 mr-1" />
                         Start
@@ -189,6 +221,17 @@ export default function StudyTracker() {
                       <div className="mt-2 text-xs text-primary font-medium">
                         Currently tracking...
                       </div>
+                    )}
+                    {isPartial && !isTracking && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="mt-2 w-full border-yellow-500/50 text-yellow-600 hover:bg-yellow-500/10"
+                        onClick={() => handleStart(idx, 25)}
+                      >
+                        <Play className="h-3 w-3 mr-1" />
+                        Resume
+                      </Button>
                     )}
                   </div>
                 );
@@ -222,6 +265,24 @@ export default function StudyTracker() {
               >
                 {formatTime(time)}
               </motion.div>
+              
+              {/* Progress indicator */}
+              {isTracking && (
+                <div className="space-y-2">
+                  <div className="w-full bg-primary-foreground/20 rounded-full h-2">
+                    <div
+                      className="bg-primary-foreground h-2 rounded-full transition-all"
+                      style={{ width: `${Math.min(currentProgress, 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-sm opacity-80">
+                    {currentProgress >= 100 
+                      ? "Session goal reached! Keep going or stop to save."
+                      : `${currentProgress}% of session goal`}
+                  </p>
+                </div>
+              )}
+              
               <div className="flex flex-wrap gap-3 justify-center pt-4">
                 {!isTracking ? (
                   <Button
@@ -277,7 +338,7 @@ export default function StudyTracker() {
         </motion.div>
       </div>
 
-      {/* Charts Grid */}
+      {/* Charts Grid - now uses real data */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <motion.div
           initial={{ opacity: 0, x: -20 }}
@@ -287,7 +348,7 @@ export default function StudyTracker() {
           <Card className="p-6 shadow-card border-border/50">
             <h3 className="text-xl font-semibold mb-6">Weekly Progress</h3>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={weeklyData}>
+              <LineChart data={stats.weeklyProgress}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" />
                 <YAxis stroke="hsl(var(--muted-foreground))" />
@@ -318,7 +379,7 @@ export default function StudyTracker() {
           <Card className="p-6 shadow-card border-border/50">
             <h3 className="text-xl font-semibold mb-6">Study by Subject</h3>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={subjectData}>
+              <BarChart data={stats.subjectBreakdown.length > 0 ? stats.subjectBreakdown : [{ subject: "No data", hours: 0 }]}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="subject" stroke="hsl(var(--muted-foreground))" />
                 <YAxis stroke="hsl(var(--muted-foreground))" />

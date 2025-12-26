@@ -1,11 +1,11 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Camera, X } from "lucide-react";
+import { Sparkles, Camera, X, Upload, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useEmotionLogs } from "@/hooks/useEmotionLogs";
@@ -29,6 +29,8 @@ const emotionColors: Record<string, string> = {
   neutral: "bg-muted",
 };
 
+const ANALYSIS_TIMEOUT = 30000; // 30 seconds timeout
+
 export default function EmotionAnalyzer() {
   const [text, setText] = useState("");
   const [focusLevel, setFocusLevel] = useState([5]);
@@ -37,9 +39,12 @@ export default function EmotionAnalyzer() {
   const [result, setResult] = useState<{ emotion: string; confidence: number; reasoning?: string; motivation?: string } | null>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [imageLoading, setImageLoading] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const { toast } = useToast();
   const { logEmotion } = useEmotionLogs();
   const { currentSession } = useStudySession();
@@ -71,16 +76,16 @@ export default function EmotionAnalyzer() {
     }
   };
 
-  const stopCamera = () => {
+  const stopCamera = useCallback(() => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
     setIsCameraActive(false);
     setVideoReady(false);
-  };
+  }, []);
 
-  const captureImage = () => {
+  const captureImage = useCallback(() => {
     if (!videoRef.current || !videoReady) {
       toast({
         title: "Camera Not Ready",
@@ -109,10 +114,28 @@ export default function EmotionAnalyzer() {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const imageData = canvas.toDataURL('image/jpeg', 0.95);
       
-      // Validate the image data
       if (imageData && imageData.length > 100) {
-        setCapturedImage(imageData);
-        stopCamera();
+        setImageLoading(true);
+        // Create an image element to verify the captured image loads
+        const img = new Image();
+        img.onload = () => {
+          setCapturedImage(imageData);
+          setImageLoading(false);
+          stopCamera();
+          toast({
+            title: "Image Captured",
+            description: "Your photo is ready for analysis.",
+          });
+        };
+        img.onerror = () => {
+          setImageLoading(false);
+          toast({
+            title: "Capture Failed",
+            description: "Failed to process captured image. Please try again.",
+            variant: "destructive",
+          });
+        };
+        img.src = imageData;
       } else {
         toast({
           title: "Capture Failed",
@@ -121,16 +144,97 @@ export default function EmotionAnalyzer() {
         });
       }
     }
-  };
+  }, [videoReady, stopCamera, toast]);
 
-  const clearImage = () => {
+  const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: "Invalid File",
+        description: "Please upload an image file.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) { // 10MB limit
+      toast({
+        title: "File Too Large",
+        description: "Please upload an image smaller than 10MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setImageLoading(true);
+    const reader = new FileReader();
+    
+    reader.onload = (e) => {
+      const imageData = e.target?.result as string;
+      // Verify the image loads correctly
+      const img = new Image();
+      img.onload = () => {
+        setCapturedImage(imageData);
+        setImageLoading(false);
+        toast({
+          title: "Image Uploaded",
+          description: "Your photo is ready for analysis.",
+        });
+      };
+      img.onerror = () => {
+        setImageLoading(false);
+        toast({
+          title: "Upload Failed",
+          description: "Failed to process uploaded image. Please try another.",
+          variant: "destructive",
+        });
+      };
+      img.src = imageData;
+    };
+
+    reader.onerror = () => {
+      setImageLoading(false);
+      toast({
+        title: "Upload Failed",
+        description: "Failed to read the file. Please try again.",
+        variant: "destructive",
+      });
+    };
+
+    reader.readAsDataURL(file);
+    
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, [toast]);
+
+  const clearImage = useCallback(() => {
     setCapturedImage(null);
-  };
+    setImageLoading(false);
+  }, []);
 
-  const handleAnalyze = async () => {
+  const handleAnalyze = useCallback(async () => {
     if (!text.trim() && !capturedImage) return;
+    if (analyzing) return; // Prevent double submission
+    
+    // Cancel any previous analysis
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    abortControllerRef.current = new AbortController();
+    const controller = abortControllerRef.current;
     
     setAnalyzing(true);
+    setResult(null); // Clear previous result
+    
+    // Set up timeout
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, ANALYSIS_TIMEOUT);
     
     try {
       const { data, error } = await supabase.functions.invoke('analyze-emotion', {
@@ -140,56 +244,88 @@ export default function EmotionAnalyzer() {
         }
       });
 
+      // Check if aborted
+      if (controller.signal.aborted) {
+        throw new Error('Analysis timed out');
+      }
+
+      clearTimeout(timeoutId);
+
       if (error) {
         console.error('Edge function error:', error);
-        toast({
-          title: "Analysis Failed",
-          description: error.message || "Failed to analyze emotion. Please try again.",
-          variant: "destructive",
-        });
-        return;
+        throw new Error(error.message || "Failed to analyze emotion");
       }
 
       if (data?.error) {
-        toast({
-          title: "Analysis Failed",
-          description: data.error,
-          variant: "destructive",
-        });
-        return;
+        // Handle specific face detection errors
+        if (data.error.includes('face') || data.error.includes('Face')) {
+          toast({
+            title: "Face Detection Issue",
+            description: data.error,
+            variant: "destructive",
+          });
+          return;
+        }
+        throw new Error(data.error);
+      }
+
+      if (!data?.emotion) {
+        throw new Error('Invalid response from analysis');
       }
 
       setResult({
         emotion: data.emotion,
-        confidence: Math.round(data.confidence),
+        confidence: Math.round(data.confidence || 75),
         reasoning: data.reasoning,
         motivation: data.motivation
       });
 
       // Save emotion to database with actual user inputs
-      await logEmotion(data.emotion, Math.round(data.confidence), {
-        sessionId: currentSession?.id,
-        focusLevel: focusLevel[0],
-        stressLevel: stressLevel[0],
-        notes: text.trim() || undefined,
-        source: capturedImage ? "camera" : "text",
-      });
+      try {
+        await logEmotion(data.emotion, Math.round(data.confidence || 75), {
+          sessionId: currentSession?.id,
+          focusLevel: focusLevel[0],
+          stressLevel: stressLevel[0],
+          notes: text.trim() || undefined,
+          source: capturedImage ? "camera" : "text",
+        });
 
-      toast({
-        title: "Emotion logged",
-        description: "Your emotional state has been recorded.",
-      });
+        toast({
+          title: "Emotion Analyzed",
+          description: "Your emotional state has been recorded successfully.",
+        });
+      } catch (logError) {
+        console.error('Failed to log emotion:', logError);
+        // Still show success for analysis even if logging fails
+        toast({
+          title: "Emotion Analyzed",
+          description: "Analysis complete. Note: Failed to save to history.",
+        });
+      }
     } catch (err) {
-      console.error('Unexpected error:', err);
-      toast({
-        title: "Error",
-        description: "An unexpected error occurred. Please try again.",
-        variant: "destructive",
-      });
+      clearTimeout(timeoutId);
+      console.error('Analysis error:', err);
+      
+      const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred";
+      
+      if (errorMessage.includes('timed out') || errorMessage.includes('aborted')) {
+        toast({
+          title: "Analysis Timeout",
+          description: "The analysis took too long. Please try again.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Analysis Failed",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
     } finally {
       setAnalyzing(false);
+      abortControllerRef.current = null;
     }
-  };
+  }, [text, capturedImage, analyzing, focusLevel, stressLevel, currentSession?.id, logEmotion, toast]);
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
@@ -249,17 +385,43 @@ export default function EmotionAnalyzer() {
           </div>
 
           <div className="space-y-3">
-            <label className="block text-sm font-medium">Or capture your expression</label>
+            <label className="block text-sm font-medium">Or capture/upload your expression</label>
             
-            {!isCameraActive && !capturedImage && (
-              <Button
-                onClick={startCamera}
-                variant="outline"
-                className="w-full"
-              >
-                <Camera className="mr-2 h-5 w-5" />
-                Use Camera
-              </Button>
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+            
+            {!isCameraActive && !capturedImage && !imageLoading && (
+              <div className="flex gap-2">
+                <Button
+                  onClick={startCamera}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  <Camera className="mr-2 h-5 w-5" />
+                  Use Camera
+                </Button>
+                <Button
+                  onClick={() => fileInputRef.current?.click()}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  <Upload className="mr-2 h-5 w-5" />
+                  Upload Photo
+                </Button>
+              </div>
+            )}
+
+            {imageLoading && (
+              <div className="flex items-center justify-center p-8 bg-muted rounded-lg">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <span className="ml-2 text-muted-foreground">Loading image...</span>
+              </div>
             )}
 
             {isCameraActive && (
@@ -272,6 +434,11 @@ export default function EmotionAnalyzer() {
                     muted
                     className="w-full aspect-video object-cover"
                   />
+                  {!videoReady && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-muted/80">
+                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <Button 
@@ -289,10 +456,17 @@ export default function EmotionAnalyzer() {
               </div>
             )}
 
-            {capturedImage && (
+            {capturedImage && !imageLoading && (
               <div className="space-y-3">
-                <div className="relative rounded-lg overflow-hidden">
-                  <img src={capturedImage} alt="Captured" className="w-full aspect-video object-cover" />
+                <div className="relative rounded-lg overflow-hidden border-2 border-primary/20">
+                  <img 
+                    src={capturedImage} 
+                    alt="Captured" 
+                    className="w-full aspect-video object-cover"
+                  />
+                  <div className="absolute bottom-2 left-2 bg-background/80 px-2 py-1 rounded text-xs text-foreground">
+                    ✓ Image ready for analysis
+                  </div>
                   <Button
                     onClick={clearImage}
                     variant="destructive"

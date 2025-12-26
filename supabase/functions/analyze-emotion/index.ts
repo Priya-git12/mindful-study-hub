@@ -38,13 +38,21 @@ serve(async (req) => {
       );
     }
 
-    console.log("Analyzing emotion for:", text ? `text: ${text.substring(0, 50)}...` : "image");
+    console.log("Analyzing emotion for:", text ? `text: ${text.substring(0, 50)}...` : "image input");
+    console.log("Image provided:", image ? "yes" : "no");
 
     // Build messages array based on input type
     const messages: any[] = [
       { 
         role: "system", 
-        content: "You are an emotion detection AI for a study buddy app called MindSync. Analyze the user's input (text, facial expression, or both) and detect their primary emotion. Provide a motivational message to help them during their study sessions based on their emotional state. Be supportive, encouraging, and gentle." 
+        content: `You are an emotion detection AI for a study buddy app called MindSync. Analyze the user's input (text, facial expression, or both) and detect their primary emotion. 
+
+For image analysis:
+- If no clear face is visible, respond with emotion "neutral" and note in reasoning that no clear face was detected
+- If multiple faces are detected, analyze the most prominent one
+- Focus on facial features: eyes, mouth, eyebrows, and overall expression
+
+Provide a motivational message to help them during their study sessions based on their emotional state. Be supportive, encouraging, and gentle.` 
       }
     ];
 
@@ -53,7 +61,7 @@ serve(async (req) => {
       messages.push({
         role: "user",
         content: [
-          { type: "text", text: `Text: ${text}` },
+          { type: "text", text: `Please analyze my emotional state. My thoughts: ${text}` },
           { type: "image_url", image_url: { url: image } }
         ]
       });
@@ -61,12 +69,12 @@ serve(async (req) => {
       messages.push({
         role: "user",
         content: [
-          { type: "text", text: "Analyze this facial expression:" },
+          { type: "text", text: "Please analyze my facial expression and detect my emotional state from this image:" },
           { type: "image_url", image_url: { url: image } }
         ]
       });
     } else {
-      messages.push({ role: "user", content: text });
+      messages.push({ role: "user", content: `Please analyze my emotional state based on this text: ${text}` });
     }
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {

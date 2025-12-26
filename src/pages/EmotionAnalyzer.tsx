@@ -51,6 +51,13 @@ export default function EmotionAnalyzer() {
 
   const startCamera = async () => {
     try {
+      // First set camera active to render the video element
+      setIsCameraActive(true);
+      setVideoReady(false);
+      
+      // Small delay to ensure video element is in DOM
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { 
           facingMode: "user",
@@ -58,21 +65,83 @@ export default function EmotionAnalyzer() {
           height: { ideal: 720 }
         } 
       });
+      
       streamRef.current = stream;
+      
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.onloadedmetadata = () => {
-          setVideoReady(true);
-        };
+        
+        // Wait for video metadata to load
+        await new Promise<void>((resolve, reject) => {
+          const video = videoRef.current;
+          if (!video) {
+            reject(new Error('Video element not found'));
+            return;
+          }
+          
+          const handleLoadedMetadata = () => {
+            video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+            video.removeEventListener('error', handleError);
+            resolve();
+          };
+          
+          const handleError = () => {
+            video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+            video.removeEventListener('error', handleError);
+            reject(new Error('Failed to load video'));
+          };
+          
+          video.addEventListener('loadedmetadata', handleLoadedMetadata);
+          video.addEventListener('error', handleError);
+          
+          // Timeout after 10 seconds
+          setTimeout(() => {
+            video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+            video.removeEventListener('error', handleError);
+            reject(new Error('Camera initialization timeout'));
+          }, 10000);
+        });
+        
+        // Play the video stream
+        await videoRef.current.play();
+        setVideoReady(true);
+        
+        toast({
+          title: "Camera Ready",
+          description: "Position your face in the frame and click Capture.",
+        });
       }
-      setIsCameraActive(true);
     } catch (err) {
       console.error('Camera access error:', err);
-      toast({
-        title: "Camera Access Denied",
-        description: "Please allow camera access to analyze facial expressions.",
-        variant: "destructive",
-      });
+      // Clean up on error
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+      setIsCameraActive(false);
+      setVideoReady(false);
+      
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      
+      if (errorMessage.includes('Permission') || errorMessage.includes('NotAllowed')) {
+        toast({
+          title: "Camera Access Denied",
+          description: "Please allow camera access in your browser settings.",
+          variant: "destructive",
+        });
+      } else if (errorMessage.includes('NotFound') || errorMessage.includes('DevicesNotFound')) {
+        toast({
+          title: "No Camera Found",
+          description: "No camera device was detected on this device.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Camera Error",
+          description: errorMessage || "Failed to start camera. Please try again.",
+          variant: "destructive",
+        });
+      }
     }
   };
 

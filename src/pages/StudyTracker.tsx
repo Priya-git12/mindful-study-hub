@@ -11,6 +11,7 @@ import { useStudySession } from "@/hooks/useStudySession";
 import { useStudySchedule } from "@/hooks/useStudySchedule";
 import { useToast } from "@/hooks/use-toast";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
+import { audioFeedback } from "@/utils/audioFeedback";
 
 // Default expected session duration (25 minutes in seconds)
 const DEFAULT_SESSION_DURATION = 25 * 60;
@@ -93,6 +94,8 @@ export default function StudyTracker() {
       }
       
       if (isFullyComplete) {
+        // Play completion sound for successful session
+        audioFeedback.onSessionComplete();
         toast({
           title: "Session completed! 🎉",
           description: `You studied for ${formatTime(time)}. Great work!`,
@@ -297,7 +300,15 @@ export default function StudyTracker() {
                   <>
                     <Button
                       size="lg"
-                      onClick={isPaused ? resume : pause}
+                      onClick={() => {
+                        if (isPaused) {
+                          resume();
+                        } else {
+                          pause();
+                          // Play pause alert and speak "Keep focusing"
+                          audioFeedback.onSessionPause();
+                        }
+                      }}
                       variant="outline"
                       className="bg-primary-foreground/10 border-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/20 px-8 transition-all duration-300"
                     >

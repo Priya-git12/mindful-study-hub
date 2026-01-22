@@ -1,10 +1,13 @@
 import { StatCard } from "@/components/StatCard";
-import { Brain, Clock, TrendingUp, Heart, Calendar, BookOpen } from "lucide-react";
+import { Brain, Clock, TrendingUp, Heart, Calendar, BookOpen, Moon } from "lucide-react";
 import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 import { useStudySchedule } from "@/hooks/useStudySchedule";
+import { useEndOfDaySummary } from "@/hooks/useEndOfDaySummary";
+import { EndOfDaySummary } from "@/components/EndOfDaySummary";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const emotionEmojis: Record<string, string> = {
@@ -20,6 +23,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { stats, loading, formatDuration, getStudyTimeDiff, getWeeklyProgressPercentage } = useDashboardStats();
   const { getDailyProgress } = useStudySchedule();
+  const { summary, showPopup, dismissSummary, showSummaryNow, loading: summaryLoading } = useEndOfDaySummary();
   
   const dailyProgress = getDailyProgress();
   const currentMoodEmoji = stats.currentMood ? emotionEmojis[stats.currentMood] || "😐" : "😐";
@@ -254,7 +258,27 @@ export default function Dashboard() {
           <h3 className="font-semibold text-sm sm:text-lg mb-1 sm:mb-2">Breaks</h3>
           <p className="text-xs sm:text-sm opacity-90">Games & music</p>
         </Card>
+
+        <Card
+          onClick={showSummaryNow}
+          className="p-4 sm:p-6 cursor-pointer transition-all duration-300 hover:shadow-soft hover:-translate-y-1 bg-muted border-primary/30"
+        >
+          <div className="flex items-center gap-2 mb-1 sm:mb-2">
+            <Moon className="h-4 w-4 text-primary" />
+            <h3 className="font-semibold text-sm sm:text-lg">Day Recap</h3>
+          </div>
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            {summaryLoading ? "Loading..." : "View reflection"}
+          </p>
+        </Card>
       </motion.div>
+
+      {/* End of Day Summary Popup (manual trigger from Dashboard) */}
+      <EndOfDaySummary
+        summary={summary}
+        isOpen={showPopup}
+        onClose={dismissSummary}
+      />
     </div>
   );
 }

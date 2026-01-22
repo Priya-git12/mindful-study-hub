@@ -112,7 +112,7 @@ export function EndOfDaySummary({ summary, isOpen, onClose }: EndOfDaySummaryPro
               onClick={onClose}
               className="w-full bg-primary hover:bg-primary/90"
             >
-              Good Night!
+              Got it!
             </Button>
           </motion.div>
         </div>

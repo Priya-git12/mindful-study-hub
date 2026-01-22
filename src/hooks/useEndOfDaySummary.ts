@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 
@@ -17,12 +17,14 @@ export interface DaySummary {
 }
 
 const SUMMARY_STORAGE_KEY = 'mindsync_last_summary_date';
+const ALL_SESSIONS_COMPLETE_KEY = 'mindsync_sessions_complete_shown';
 
 export function useEndOfDaySummary() {
   const { user, isAuthenticated } = useAuth();
   const [summary, setSummary] = useState<DaySummary | null>(null);
   const [showPopup, setShowPopup] = useState(false);
   const [loading, setLoading] = useState(false);
+  const hasTriggeredRef = useRef(false);
 
   const generateMessage = (data: Omit<DaySummary, 'message' | 'closingLine' | 'state'>): { state: DaySummary['state']; message: string; closingLine: string } => {
     const { studyHours, goalHours, completedSessions, totalSessions, dominantEmotion, avgFocus, avgStress, emotionCount } = data;
@@ -33,7 +35,6 @@ export function useEndOfDaySummary() {
     const isFocused = avgFocus >= 6;
     const hasEmotionData = emotionCount > 0;
 
-    // Determine state based on combined analysis
     let state: DaySummary['state'] = 'balanced';
     let message = '';
     let closingLine = '';
@@ -127,11 +128,11 @@ export function useEndOfDaySummary() {
         const todayPlan = weeklyPlan?.find((d) => d.day.toLowerCase() === todayName.toLowerCase());
         if (todayPlan?.sessions) {
           totalSessions = todayPlan.sessions.length;
-          goalHours = todayPlan.sessions.reduce((sum, s) => sum + (s.duration || 0), 0) / 60; // duration is in minutes
+          goalHours = todayPlan.sessions.reduce((sum, s) => sum + (s.duration || 0), 0) / 60;
         }
       }
 
-      const completedSessions = (completions || []).length;
+      const completedSessions = (completions || []).filter(c => c.status === 'completed').length;
 
       // Analyze emotions
       const emotionsList = emotions || [];
@@ -175,17 +176,82 @@ export function useEndOfDaySummary() {
     }
   }, [user]);
 
+  // Check if all daily sessions are completed
+  const checkAllSessionsComplete = useCallback(async (): Promise<boolean> => {
+    if (!user) return false;
+
+    try {
+      const today = new Date();
+      const todayStr = today.toISOString().split("T")[0];
+      const todayName = today.toLocaleDateString("en-US", { weekday: "long" });
+
+      // Fetch active schedule
+      const { data: schedule } = await supabase
+        .from("study_schedules")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .maybeSingle();
+
+      if (!schedule) return false;
+
+      const weeklyPlan = schedule.weekly_plan as unknown as Array<{ day: string; sessions: Array<unknown> }>;
+      const todayPlan = weeklyPlan?.find((d) => d.day.toLowerCase() === todayName.toLowerCase());
+      
+      if (!todayPlan?.sessions || todayPlan.sessions.length === 0) return false;
+
+      const totalSessions = todayPlan.sessions.length;
+
+      // Fetch today's completions for this schedule
+      const { data: completions } = await supabase
+        .from("schedule_session_completions")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("schedule_id", schedule.id)
+        .eq("day", todayName)
+        .gte("created_at", `${todayStr}T00:00:00`)
+        .lte("created_at", `${todayStr}T23:59:59`);
+
+      const completedCount = (completions || []).filter(c => c.status === 'completed').length;
+
+      return completedCount >= totalSessions && totalSessions > 0;
+    } catch (err) {
+      console.error("Error checking session completions:", err);
+      return false;
+    }
+  }, [user]);
+
+  // Trigger summary when all sessions complete
+  const triggerOnAllSessionsComplete = useCallback(async () => {
+    if (hasTriggeredRef.current) return;
+
+    const today = new Date().toISOString().split("T")[0];
+    const alreadyShown = localStorage.getItem(ALL_SESSIONS_COMPLETE_KEY);
+    
+    if (alreadyShown === today) return;
+
+    const allComplete = await checkAllSessionsComplete();
+    if (allComplete) {
+      const summaryData = await fetchDaySummary();
+      if (summaryData) {
+        hasTriggeredRef.current = true;
+        setSummary(summaryData);
+        setShowPopup(true);
+        localStorage.setItem(ALL_SESSIONS_COMPLETE_KEY, today);
+      }
+    }
+  }, [checkAllSessionsComplete, fetchDaySummary]);
+
   const checkAndShowSummary = useCallback(async () => {
     const now = new Date();
     const hour = now.getHours();
     
-    // Show summary after 8 PM (20:00)
+    // End of day trigger: after 8 PM
     if (hour < 20) return;
 
     const today = now.toISOString().split("T")[0];
     const lastShown = localStorage.getItem(SUMMARY_STORAGE_KEY);
 
-    // Don't show if already shown today
     if (lastShown === today) return;
 
     const summaryData = await fetchDaySummary();
@@ -198,10 +264,12 @@ export function useEndOfDaySummary() {
   const dismissSummary = useCallback(() => {
     const today = new Date().toISOString().split("T")[0];
     localStorage.setItem(SUMMARY_STORAGE_KEY, today);
+    localStorage.setItem(ALL_SESSIONS_COMPLETE_KEY, today);
     setShowPopup(false);
+    hasTriggeredRef.current = true;
   }, []);
 
-  // Force show for testing/manual trigger
+  // Manual trigger for testing
   const showSummaryNow = useCallback(async () => {
     const summaryData = await fetchDaySummary();
     if (summaryData) {
@@ -210,14 +278,49 @@ export function useEndOfDaySummary() {
     }
   }, [fetchDaySummary]);
 
+  // Subscribe to realtime session completions
   useEffect(() => {
-    if (isAuthenticated && user) {
-      // Check on mount and every 30 minutes
-      checkAndShowSummary();
-      const interval = setInterval(checkAndShowSummary, 30 * 60 * 1000);
-      return () => clearInterval(interval);
+    if (!isAuthenticated || !user) return;
+
+    // Reset trigger flag at start of new day
+    const today = new Date().toISOString().split("T")[0];
+    const alreadyShown = localStorage.getItem(ALL_SESSIONS_COMPLETE_KEY);
+    if (alreadyShown !== today) {
+      hasTriggeredRef.current = false;
     }
-  }, [isAuthenticated, user, checkAndShowSummary]);
+
+    // Initial check for all sessions complete
+    triggerOnAllSessionsComplete();
+
+    // Subscribe to realtime completions
+    const channel = supabase
+      .channel('session-completions-summary')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'schedule_session_completions',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          // Debounce the check slightly to allow DB to settle
+          setTimeout(() => {
+            triggerOnAllSessionsComplete();
+          }, 500);
+        }
+      )
+      .subscribe();
+
+    // Time-based check (end of day fallback)
+    checkAndShowSummary();
+    const interval = setInterval(checkAndShowSummary, 30 * 60 * 1000);
+
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
+  }, [isAuthenticated, user, checkAndShowSummary, triggerOnAllSessionsComplete]);
 
   return {
     summary,
